@@ -62,6 +62,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearLearnedBtn: document.getElementById('clearLearnedBtn'),
     clearMemorizeBtn: document.getElementById('clearMemorizeBtn'),
     clearCacheBtn: document.getElementById('clearCacheBtn'),
+    learnedFilters: document.getElementById('learnedFilters'),
+    memorizeFilters: document.getElementById('memorizeFilters'),
+    cachedFilters: document.getElementById('cachedFilters'),
+    learnedSearchInput: document.getElementById('learnedSearchInput'),
+    memorizeSearchInput: document.getElementById('memorizeSearchInput'),
+    cachedSearchInput: document.getElementById('cachedSearchInput'),
+    difficultyFilterBtns: document.querySelectorAll('.difficulty-filter-btn'),
 
     // 统计
     statTotalWords: document.getElementById('statTotalWords'),
@@ -112,20 +119,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // 存储原始数据（用于搜索和筛选）
+  let allLearnedWords = [];
+  let allMemorizeWords = [];
+  let allCachedWords = [];
+
   // 加载词汇列表
   function loadWordLists(result) {
     const learnedWords = result.learnedWords || [];
     const memorizeList = result.memorizeList || [];
     
+    // 保存原始数据（包含难度信息）
+    allLearnedWords = learnedWords.map(w => ({
+      original: w.original,
+      word: w.word,
+      addedAt: w.addedAt,
+      difficulty: w.difficulty || 'B1' // 如果已学会词汇有难度信息则使用，否则默认B1
+    }));
+    
+    allMemorizeWords = memorizeList.map(w => ({
+      original: w.word,
+      word: '',
+      addedAt: w.addedAt,
+      difficulty: w.difficulty || 'B1' // 如果需记忆词汇有难度信息则使用，否则默认B1
+    }));
+    
     // 更新计数
     elements.learnedTabCount.textContent = learnedWords.length;
     elements.memorizeTabCount.textContent = memorizeList.length;
     
-    // 渲染已学会列表
-    renderWordList(elements.learnedList, learnedWords, 'learned');
-    
-    // 渲染需记忆列表
-    renderWordList(elements.memorizeList, memorizeList.map(w => ({ original: w.word, word: '', addedAt: w.addedAt })), 'memorize');
+    // 应用搜索和筛选
+    filterLearnedWords();
+    filterMemorizeWords();
     
     // 加载缓存
     chrome.storage.local.get('vocabmeld_word_cache', (data) => {
@@ -134,9 +159,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const cacheWords = cache.map(item => {
         const [word] = item.key.split(':');
-        return { original: word, word: item.translation, addedAt: item.timestamp };
+        return { 
+          original: word, 
+          word: item.translation, 
+          addedAt: item.timestamp,
+          difficulty: item.difficulty || 'B1',
+          phonetic: item.phonetic || ''
+        };
       });
-      renderWordList(elements.cachedList, cacheWords, 'cached');
+      
+      // 保存原始数据
+      allCachedWords = cacheWords;
+      
+      // 应用搜索和筛选
+      filterCachedWords();
     });
   }
 
@@ -151,6 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="word-item">
         <span class="word-original">${w.original}</span>
         ${w.word ? `<span class="word-translation">${w.word}</span>` : ''}
+        ${w.difficulty ? `<span class="word-difficulty difficulty-${w.difficulty.toLowerCase()}">${w.difficulty}</span>` : ''}
         <span class="word-date">${formatDate(w.addedAt)}</span>
         ${type !== 'cached' ? `<button class="word-remove" data-word="${w.original}" data-type="${type}">&times;</button>` : ''}
       </div>
@@ -160,6 +197,87 @@ document.addEventListener('DOMContentLoaded', async () => {
     container.querySelectorAll('.word-remove').forEach(btn => {
       btn.addEventListener('click', () => removeWord(btn.dataset.word, btn.dataset.type));
     });
+  }
+
+  // 搜索和筛选已学会词汇
+  function filterLearnedWords() {
+    const searchTerm = (elements.learnedSearchInput?.value || '').toLowerCase().trim();
+    const selectedDifficulty = document.querySelector('.difficulty-filter-btn.active[data-tab="learned"]')?.dataset.difficulty || 'all';
+    
+    let filtered = allLearnedWords;
+    
+    // 应用搜索
+    if (searchTerm) {
+      filtered = filtered.filter(w => 
+        w.original.toLowerCase().includes(searchTerm) || 
+        (w.word && w.word.toLowerCase().includes(searchTerm))
+      );
+    }
+    
+    // 应用难度筛选
+    if (selectedDifficulty !== 'all') {
+      filtered = filtered.filter(w => w.difficulty === selectedDifficulty);
+    }
+    
+    // 更新计数
+    elements.learnedTabCount.textContent = `${filtered.length} / ${allLearnedWords.length}`;
+    
+    // 渲染筛选后的列表
+    renderWordList(elements.learnedList, filtered, 'learned');
+  }
+
+  // 搜索和筛选需记忆词汇
+  function filterMemorizeWords() {
+    const searchTerm = (elements.memorizeSearchInput?.value || '').toLowerCase().trim();
+    const selectedDifficulty = document.querySelector('.difficulty-filter-btn.active[data-tab="memorize"]')?.dataset.difficulty || 'all';
+    
+    let filtered = allMemorizeWords;
+    
+    // 应用搜索
+    if (searchTerm) {
+      filtered = filtered.filter(w => 
+        w.original.toLowerCase().includes(searchTerm) || 
+        (w.word && w.word.toLowerCase().includes(searchTerm))
+      );
+    }
+    
+    // 应用难度筛选
+    if (selectedDifficulty !== 'all') {
+      filtered = filtered.filter(w => w.difficulty === selectedDifficulty);
+    }
+    
+    // 更新计数
+    elements.memorizeTabCount.textContent = `${filtered.length} / ${allMemorizeWords.length}`;
+    
+    // 渲染筛选后的列表
+    renderWordList(elements.memorizeList, filtered, 'memorize');
+  }
+
+  // 搜索和筛选缓存词汇
+  function filterCachedWords() {
+    const searchTerm = (elements.cachedSearchInput?.value || '').toLowerCase().trim();
+    const selectedDifficulty = document.querySelector('.difficulty-filter-btn.active[data-tab="cached"]')?.dataset.difficulty || 'all';
+    
+    let filtered = allCachedWords;
+    
+    // 应用搜索
+    if (searchTerm) {
+      filtered = filtered.filter(w => 
+        w.original.toLowerCase().includes(searchTerm) || 
+        (w.word && w.word.toLowerCase().includes(searchTerm))
+      );
+    }
+    
+    // 应用难度筛选
+    if (selectedDifficulty !== 'all') {
+      filtered = filtered.filter(w => w.difficulty === selectedDifficulty);
+    }
+    
+    // 更新计数
+    elements.cachedTabCount.textContent = `${filtered.length} / ${allCachedWords.length}`;
+    
+    // 渲染筛选后的列表
+    renderWordList(elements.cachedList, filtered, 'cached');
   }
 
   // 格式化日期
@@ -356,6 +474,60 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.word-list').forEach(list => {
           list.classList.toggle('hidden', list.dataset.tab !== tabName);
         });
+        
+        // 显示/隐藏搜索和筛选器
+        document.querySelectorAll('.word-filters').forEach(filter => {
+          filter.classList.toggle('hidden', filter.dataset.tab !== tabName);
+        });
+      });
+    });
+
+    // 初始化时检查当前激活的标签
+    const activeTab = document.querySelector('.word-tab.active');
+    if (activeTab) {
+      const tabName = activeTab.dataset.tab;
+      document.querySelectorAll('.word-filters').forEach(filter => {
+        filter.classList.toggle('hidden', filter.dataset.tab !== tabName);
+      });
+    }
+
+    // 搜索输入事件
+    if (elements.learnedSearchInput) {
+      elements.learnedSearchInput.addEventListener('input', () => {
+        filterLearnedWords();
+      });
+    }
+
+    if (elements.memorizeSearchInput) {
+      elements.memorizeSearchInput.addEventListener('input', () => {
+        filterMemorizeWords();
+      });
+    }
+
+    if (elements.cachedSearchInput) {
+      elements.cachedSearchInput.addEventListener('input', () => {
+        filterCachedWords();
+      });
+    }
+
+    // 难度筛选按钮事件
+    elements.difficultyFilterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        // 只激活同一tab的按钮
+        document.querySelectorAll(`.difficulty-filter-btn[data-tab="${tab}"]`).forEach(b => {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        
+        // 根据tab调用对应的筛选函数
+        if (tab === 'learned') {
+          filterLearnedWords();
+        } else if (tab === 'memorize') {
+          filterMemorizeWords();
+        } else if (tab === 'cached') {
+          filterCachedWords();
+        }
       });
     });
 

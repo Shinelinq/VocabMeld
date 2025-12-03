@@ -62,7 +62,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         const list = result.memorizeList || [];
         if (!list.some(w => w.word === word)) {
           list.push({ word, addedAt: Date.now() });
-          chrome.storage.sync.set({ memorizeList: list });
+          chrome.storage.sync.set({ memorizeList: list }, () => {
+            // 通知 content script 处理特定单词
+            chrome.tabs.sendMessage(tab.id, { 
+              action: 'processSpecificWords', 
+              words: [word] 
+            }).catch(err => {
+              console.log('[VocabMeld] Content script not ready, word will be processed on next page load');
+            });
+          });
         }
       });
     }
