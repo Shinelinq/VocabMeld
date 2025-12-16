@@ -126,6 +126,7 @@
           autoProcess: result.autoProcess ?? false,
           showPhonetic: result.showPhonetic ?? true,
           translationStyle: result.translationStyle || 'translation-original',
+          theme: result.theme || 'dark',
           enabled: result.enabled ?? true,
           blacklist: result.blacklist || [],
           whitelist: result.whitelist || [],
@@ -135,6 +136,17 @@
         resolve(config);
       });
     });
+  }
+
+  // 更新 UI 元素的主题
+  function updateUITheme() {
+    const theme = config?.theme || 'dark';
+    if (tooltip) {
+      tooltip.setAttribute('data-theme', theme);
+    }
+    if (selectionPopup) {
+      selectionPopup.setAttribute('data-theme', theme);
+    }
   }
 
   async function loadWordCache() {
@@ -1245,6 +1257,7 @@ ${uncached.join(', ')}
     
     tooltip = document.createElement('div');
     tooltip.className = 'vocabmeld-tooltip';
+    tooltip.setAttribute('data-theme', config?.theme || 'dark');
     tooltip.style.display = 'none';
     document.body.appendChild(tooltip);
   }
@@ -1294,6 +1307,7 @@ ${uncached.join(', ')}
     
     selectionPopup = document.createElement('div');
     selectionPopup.className = 'vocabmeld-selection-popup';
+    selectionPopup.setAttribute('data-theme', config?.theme || 'dark');
     selectionPopup.style.display = 'none';
     selectionPopup.innerHTML = '<button class="vocabmeld-add-memorize">添加到需记忆</button>';
     document.body.appendChild(selectionPopup);
@@ -1404,6 +1418,10 @@ ${uncached.join(', ')}
         loadConfig().then(() => {
           if (changes.enabled?.newValue === false) {
             restoreAll();
+          }
+          // 主题变化时更新 UI
+          if (changes.theme) {
+            updateUITheme();
           }
           // 难度、强度或样式变化时，需要重新处理页面
           if (changes.difficultyLevel || changes.intensity || changes.translationStyle) {
