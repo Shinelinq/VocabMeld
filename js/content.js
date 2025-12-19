@@ -28,6 +28,7 @@
   let selectionPopup = null;
   let intersectionObserver = null;
   let pendingContainers = new Set(); // 待处理的可见容器
+  let tooltipHideTimeout = null; // tooltip 延迟隐藏计时器
 
   // ============ 工具函数 ============
   function isDifficultyCompatible(wordDifficulty, userDifficulty) {
@@ -1485,8 +1486,20 @@ ${uncached.join(', ')}
     tooltip.style.display = 'block';
   }
 
-  function hideTooltip() {
-    if (tooltip) tooltip.style.display = 'none';
+  function hideTooltip(immediate = false) {
+    if (immediate) {
+      clearTimeout(tooltipHideTimeout);
+      if (tooltip) tooltip.style.display = 'none';
+    } else {
+      // 延迟隐藏，给用户时间移动到 tooltip 上
+      tooltipHideTimeout = setTimeout(() => {
+        if (tooltip) tooltip.style.display = 'none';
+      }, 150);
+    }
+  }
+  
+  function cancelHideTooltip() {
+    clearTimeout(tooltipHideTimeout);
   }
 
   function showToast(message) {
@@ -1524,31 +1537,36 @@ ${uncached.join(', ')}
 
   // ============ 事件处理 ============
   function setupEventListeners() {
-    // 悬停显示提示 - 使用 mouseenter/mouseleave 更稳定
+    // 悬停显示提示
     document.addEventListener('mouseover', (e) => {
       const target = e.target.closest('.vocabmeld-translated');
+      const tooltipTarget = e.target.closest('.vocabmeld-tooltip');
+      
       if (target) {
+        cancelHideTooltip();
         showTooltip(target);
+      } else if (tooltipTarget) {
+        // 鼠标移入 tooltip 时取消隐藏
+        cancelHideTooltip();
       }
     });
 
     document.addEventListener('mouseout', (e) => {
       const target = e.target.closest('.vocabmeld-translated');
+      const tooltipTarget = e.target.closest('.vocabmeld-tooltip');
       const relatedTarget = e.relatedTarget;
       
-      // 只有当鼠标移出到非翻译元素和非tooltip时才隐藏
+      // 从翻译元素移出时，延迟隐藏
       if (target && 
           !relatedTarget?.closest('.vocabmeld-translated') && 
           !relatedTarget?.closest('.vocabmeld-tooltip')) {
         hideTooltip();
       }
-    });
-    
-    // 鼠标移出 tooltip 时也隐藏
-    document.addEventListener('mouseout', (e) => {
-      if (e.target.closest('.vocabmeld-tooltip') && 
-          !e.relatedTarget?.closest('.vocabmeld-tooltip') &&
-          !e.relatedTarget?.closest('.vocabmeld-translated')) {
+      
+      // 从 tooltip 移出时，延迟隐藏
+      if (tooltipTarget && 
+          !relatedTarget?.closest('.vocabmeld-tooltip') &&
+          !relatedTarget?.closest('.vocabmeld-translated')) {
         hideTooltip();
       }
     });
@@ -1617,21 +1635,6 @@ ${uncached.join(', ')}
         hideTooltip();
         showToast(`"${original}" 已标记为已学会`);
         return;
-      }
-    });
-
-    // 右键标记已学会
-    document.addEventListener('contextmenu', async (e) => {
-      const target = e.target.closest('.vocabmeld-translated');
-      if (target) {
-        e.preventDefault();
-        const original = target.getAttribute('data-original');
-        const translation = target.getAttribute('data-translation');
-        const difficulty = target.getAttribute('data-difficulty') || 'B1';
-        await addToWhitelist(original, translation, difficulty);
-        restoreAllSameWord(original); // 恢复页面上所有相同单词
-        hideTooltip();
-        showToast(`"${original}" 已标记为已学会`);
       }
     });
 
