@@ -1898,7 +1898,7 @@ ${originalWord}
       const meanings = [];
       const trs = ecData.trs || [];
       
-      for (const tr of trs.slice(0, 3)) {
+      for (const tr of trs.slice(0, 4)) {
         const defText = tr.tr?.[0]?.l?.i?.[0] || '';
         if (defText) {
           // 解析词性和释义（格式如 "n. 度，度数"）
@@ -1909,7 +1909,7 @@ ${originalWord}
             // 合并相同词性
             const existing = meanings.find(m => m.partOfSpeech === pos);
             if (existing) {
-              if (existing.definitions.length < 3) {
+              if (existing.definitions.length < 4) {
                 existing.definitions.push(def);
               }
             } else {
@@ -1955,6 +1955,26 @@ ${originalWord}
       const doc = parser.parseFromString(htmlString, 'text/html');
       const contentRoot = doc.querySelector('.mw-parser-output') || doc.body;
       
+      // 找到 English 语言部分的范围（h2 id="English" 到下一个 h2）
+      const allH2 = contentRoot.querySelectorAll('h2');
+      let englishStart = null;
+      let englishEnd = null;
+      
+      for (let i = 0; i < allH2.length; i++) {
+        const h2 = allH2[i];
+        if (h2.id === 'English' || h2.textContent.includes('English')) {
+          englishStart = h2.parentNode?.classList?.contains('mw-heading') ? h2.parentNode : h2;
+          // 下一个 h2 就是 English 部分的结束
+          if (i + 1 < allH2.length) {
+            const nextH2 = allH2[i + 1];
+            englishEnd = nextH2.parentNode?.classList?.contains('mw-heading') ? nextH2.parentNode : nextH2;
+          }
+          break;
+        }
+      }
+      
+      if (!englishStart) return null;
+      
       const phoneticEl = contentRoot.querySelector('.IPA');
       const phonetic = phoneticEl?.textContent?.trim() || '';
       
@@ -1963,6 +1983,18 @@ ${originalWord}
       const headers = contentRoot.querySelectorAll('h3, h4');
       
       for (const header of headers) {
+        // 检查 header 是否在 English 部分内
+        const headerNode = header.parentNode?.classList?.contains('mw-heading') ? header.parentNode : header;
+        
+        // 比较 DOM 位置：header 必须在 englishStart 之后
+        if (englishStart.compareDocumentPosition(headerNode) & Node.DOCUMENT_POSITION_PRECEDING) {
+          continue; // header 在 englishStart 之前，跳过
+        }
+        // 如果有 englishEnd，header 必须在 englishEnd 之前
+        if (englishEnd && (englishEnd.compareDocumentPosition(headerNode) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          continue; // header 在 englishEnd 之后，跳过
+        }
+        
         const headerText = header.textContent.replace(/\[.*?\]/g, '').trim();
         const matchedPOS = validPOS.find(pos => headerText.includes(pos));
         if (!matchedPOS) continue;
@@ -1982,16 +2014,16 @@ ${originalWord}
         
         if (definitionList) {
           const listItems = definitionList.querySelectorAll(':scope > li');
-          for (const li of Array.from(listItems).slice(0, 2)) {
+          for (const li of Array.from(listItems).slice(0, 3)) {
             const cloneLi = li.cloneNode(true);
             cloneLi.querySelectorAll('.h-usage-example, .e-example, ul, dl, .reference, .citation').forEach(el => el.remove());
-            const defText = cloneLi.textContent.replace(/<[^>]*>/g, '').trim().slice(0, 150);
+            const defText = cloneLi.textContent.replace(/<[^>]*>/g, '').trim().slice(0, 200);
             if (defText) {
               if (!meaningsMap.has(matchedPOS)) {
                 meaningsMap.set(matchedPOS, []);
               }
               const defs = meaningsMap.get(matchedPOS);
-              if (defs.length < 3) defs.push(defText);
+              if (defs.length < 4) defs.push(defText);
             }
           }
         }
@@ -1999,7 +2031,7 @@ ${originalWord}
       
       const meanings = [];
       for (const [pos, defs] of meaningsMap) {
-        if (meanings.length >= 3) break;
+        if (meanings.length >= 4) break;
         if (defs.length > 0) meanings.push({ partOfSpeech: pos, definitions: defs });
       }
       
