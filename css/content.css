@@ -206,18 +206,18 @@
 
 .vocabmeld-tooltip .vocabmeld-tooltip-actions {
   display: flex !important;
-  gap: 8px !important;
-  padding-top: 10px !important;
-  border-top: 1px solid #334155 !important;
-  margin-top: 8px !important;
+  gap: 4px !important;
+  margin-bottom: 8px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid #334155 !important;
 }
 
 .vocabmeld-tooltip .vocabmeld-tooltip-btn {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 32px !important;
-  height: 32px !important;
+  width: 24px !important;
+  height: 24px !important;
   border: none !important;
   border-radius: 6px !important;
   background: #334155 !important;
@@ -253,7 +253,7 @@
 
 /* Light theme button styles */
 .vocabmeld-tooltip[data-theme="light"] .vocabmeld-tooltip-actions {
-  border-top: 1px solid #e2e8f0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
 }
 
 .vocabmeld-tooltip[data-theme="light"] .vocabmeld-tooltip-btn {

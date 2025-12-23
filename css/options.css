@@ -701,11 +701,18 @@ input:checked + .toggle-slider:before {
 
 .word-original {
   font-weight: 500;
-  flex: 1;
+  color: var(--primary-light);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.word-original:hover {
+  color: var(--primary);
 }
 
 .word-translation {
-  color: var(--primary-light);
+  flex: 1;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -1579,4 +1586,138 @@ input:checked + .toggle-slider:before {
   .stats-overview {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Word Tooltip */
+@keyframes word-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.word-tooltip {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 220px;
+  max-width: 320px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  animation: word-tooltip-in 0.15s ease-out;
+  display: none;
+  pointer-events: auto;
+}
+
+.word-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.word-tooltip-word {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary-light);
+  margin: 0;
+}
+
+.word-tooltip-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.word-tooltip-phonetic {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 6px;
+  font-style: italic;
+}
+
+.word-tooltip-original {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+/* Dictionary styles */
+.word-tooltip-dict {
+  margin: 8px 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  max-height: 150px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-light) transparent;
+}
+
+.word-tooltip-dict::-webkit-scrollbar {
+  width: 6px;
+}
+
+.word-tooltip-dict::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.word-tooltip-dict::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 3px;
+}
+
+.word-tooltip-dict::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.word-tooltip-dict-loading,
+.word-tooltip-dict-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.word-tooltip-dict-entry {
+  margin-bottom: 6px;
+}
+
+.word-tooltip-dict-entry:last-child {
+  margin-bottom: 0;
+}
+
+.word-tooltip-dict-pos {
+  display: inline-block;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.word-tooltip-dict-defs {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  list-style: disc;
+}
+
+.word-tooltip-dict-defs li {
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  line-height: 1.4;
+  font-size: 13px;
 }

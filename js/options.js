@@ -112,6 +112,204 @@ document.addEventListener('DOMContentLoaded', async () => {
     exportCache: document.getElementById('exportCache')
   };
 
+  // ============ Tooltip 相关 ============
+  let wordTooltip = null;
+  let tooltipHideTimeout = null;
+  let dictCache = new Map();
+  let currentSettings = {};
+
+  function createWordTooltip() {
+    if (wordTooltip) return wordTooltip;
+    wordTooltip = document.createElement('div');
+    wordTooltip.className = 'word-tooltip';
+    document.body.appendChild(wordTooltip);
+
+    wordTooltip.addEventListener('mouseenter', () => {
+      if (tooltipHideTimeout) {
+        clearTimeout(tooltipHideTimeout);
+        tooltipHideTimeout = null;
+      }
+    });
+
+    wordTooltip.addEventListener('mouseleave', () => {
+      hideWordTooltip();
+    });
+
+    return wordTooltip;
+  }
+
+  function showWordTooltip(element, wordData) {
+    if (!wordTooltip) createWordTooltip();
+    if (tooltipHideTimeout) {
+      clearTimeout(tooltipHideTimeout);
+      tooltipHideTimeout = null;
+    }
+
+    const { original, translation, phonetic, difficulty } = wordData;
+    const dictionaryType = currentSettings.dictionaryType || 'zh-en';
+
+    wordTooltip.innerHTML = `
+      <div class="word-tooltip-header">
+        <span class="word-tooltip-word">${original}</span>
+        ${difficulty ? `<span class="word-tooltip-badge">${difficulty}</span>` : ''}
+      </div>
+      ${phonetic ? `<div class="word-tooltip-phonetic">${phonetic}</div>` : ''}
+      ${translation ? `<div class="word-tooltip-original">释义: ${translation}</div>` : ''}
+      <div class="word-tooltip-dict">
+        <div class="word-tooltip-dict-loading">加载词典...</div>
+      </div>
+    `;
+
+    const rect = element.getBoundingClientRect();
+    wordTooltip.style.left = rect.right + 8 + 'px';
+    wordTooltip.style.top = rect.top + 'px';
+    wordTooltip.style.display = 'block';
+
+    // 异步加载词典数据
+    fetchDictionaryData(original, dictionaryType).then(dictData => {
+      if (wordTooltip.style.display !== 'none') {
+        updateTooltipDictionary(dictData);
+      }
+    });
+  }
+
+  function hideWordTooltip() {
+    if (tooltipHideTimeout) return;
+    tooltipHideTimeout = setTimeout(() => {
+      if (wordTooltip) {
+        wordTooltip.style.display = 'none';
+      }
+      tooltipHideTimeout = null;
+    }, 150);
+  }
+
+  function updateTooltipDictionary(dictData) {
+    if (!wordTooltip) return;
+    const dictContainer = wordTooltip.querySelector('.word-tooltip-dict');
+    if (!dictContainer) return;
+
+    if (!dictData || !dictData.meanings || dictData.meanings.length === 0) {
+      dictContainer.innerHTML = '<div class="word-tooltip-dict-empty">暂无词典数据</div>';
+      return;
+    }
+
+    let html = '';
+    for (const meaning of dictData.meanings) {
+      html += `<div class="word-tooltip-dict-entry">`;
+      if (meaning.partOfSpeech) {
+        html += `<span class="word-tooltip-dict-pos">${meaning.partOfSpeech}</span>`;
+      }
+      html += `<ul class="word-tooltip-dict-defs">`;
+      for (const def of meaning.definitions) {
+        html += `<li>${def}</li>`;
+      }
+      html += `</ul></div>`;
+    }
+    dictContainer.innerHTML = html;
+  }
+
+  async function fetchDictionaryData(word, dictionaryType) {
+    const cacheKey = `${word.toLowerCase()}_${dictionaryType}`;
+    if (dictCache.has(cacheKey)) {
+      return dictCache.get(cacheKey);
+    }
+
+    try {
+      let result = null;
+      if (dictionaryType === 'zh-en') {
+        result = await fetchYoudaoData(word);
+      } else {
+        result = await fetchWiktionaryData(word);
+      }
+      dictCache.set(cacheKey, result);
+      return result;
+    } catch (e) {
+      console.error('[VocabMeld] Dictionary fetch error:', e);
+      return null;
+    }
+  }
+
+  async function fetchYoudaoData(word) {
+    try {
+      const url = `https://dict.youdao.com/jsonapi?q=${encodeURIComponent(word)}`;
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ action: 'fetchProxy', url, options: {} }, (resp) => {
+          if (resp && resp.success) {
+            resolve(resp.data);
+          } else {
+            reject(new Error(resp?.error || 'Fetch failed'));
+          }
+        });
+      });
+
+      const meanings = [];
+      if (response?.ec?.word) {
+        const trs = response.ec.word[0]?.trs || [];
+        for (const tr of trs.slice(0, 3)) {
+          const text = tr.tr?.[0]?.l?.i?.[0] || '';
+          if (text) {
+            const posMatch = text.match(/^([a-z]+\.)\s*/);
+            if (posMatch) {
+              meanings.push({
+                partOfSpeech: posMatch[1],
+                definitions: [text.replace(posMatch[0], '')]
+              });
+            } else {
+              meanings.push({
+                partOfSpeech: '',
+                definitions: [text]
+              });
+            }
+          }
+        }
+      }
+      return meanings.length > 0 ? { meanings } : null;
+    } catch (e) {
+      console.error('[VocabMeld] Youdao fetch error:', e);
+      return null;
+    }
+  }
+
+  async function fetchWiktionaryData(word) {
+    try {
+      const url = `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word.toLowerCase())}`;
+      const response = await fetch(url);
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      const meanings = [];
+      const seenPos = new Map();
+
+      const entries = data.en || [];
+      for (const entry of entries) {
+        const pos = entry.partOfSpeech || '';
+        const defs = (entry.definitions || []).slice(0, 3).map(d => {
+          let def = d.definition || '';
+          def = def.replace(/<[^>]+>/g, '');
+          return def;
+        }).filter(d => d);
+
+        if (defs.length > 0) {
+          if (seenPos.has(pos)) {
+            const existingDefs = seenPos.get(pos);
+            for (const def of defs) {
+              if (!existingDefs.includes(def) && existingDefs.length < 3) {
+                existingDefs.push(def);
+              }
+            }
+          } else if (seenPos.size < 3) {
+            seenPos.set(pos, defs);
+            meanings.push({ partOfSpeech: pos, definitions: defs });
+          }
+        }
+      }
+      return meanings.length > 0 ? { meanings } : null;
+    } catch (e) {
+      console.error('[VocabMeld] Wiktionary fetch error:', e);
+      return null;
+    }
+  }
+
   // 应用主题
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
@@ -404,6 +602,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       elements.dictionaryTypeRadios.forEach(radio => {
         radio.checked = radio.value === dictionaryType;
       });
+      currentSettings.dictionaryType = dictionaryType;
       elements.showAddMemorize.checked = result.showAddMemorize ?? true;
       
       const cacheMaxSize = result.cacheMaxSize || 2000;
@@ -512,7 +711,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <path fill="currentColor" d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z"/>
           </svg>
         </button>
-        <span class="word-original">${w.original}</span>
+        <span class="word-original" data-original="${w.original}" data-translation="${w.word || ''}" data-phonetic="${w.phonetic || ''}" data-difficulty="${w.difficulty || ''}">${w.original}</span>
         ${w.word ? `<span class="word-translation">${w.word}</span>` : ''}
         ${w.difficulty ? `<span class="word-difficulty difficulty-${w.difficulty.toLowerCase()}">${w.difficulty}</span>` : ''}
         <span class="word-date">${formatDate(w.addedAt)}</span>
@@ -533,6 +732,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           removeWord(btn.dataset.word, btn.dataset.type);
         }
+      });
+    });
+
+    // 绑定单词 hover 事件显示 tooltip
+    container.querySelectorAll('.word-original').forEach(span => {
+      span.addEventListener('mouseenter', () => {
+        const wordData = {
+          original: span.dataset.original,
+          translation: span.dataset.translation,
+          phonetic: span.dataset.phonetic,
+          difficulty: span.dataset.difficulty
+        };
+        showWordTooltip(span, wordData);
+      });
+      span.addEventListener('mouseleave', () => {
+        hideWordTooltip();
       });
     });
   }

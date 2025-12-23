@@ -29,6 +29,7 @@
   let intersectionObserver = null;
   let pendingContainers = new Set(); // 待处理的可见容器
   let tooltipHideTimeout = null; // tooltip 延迟隐藏计时器
+  let currentTooltipElement = null; // 当前显示 tooltip 的元素
 
   // ============ 工具函数 ============
   function isDifficultyCompatible(wordDifficulty, userDifficulty) {
@@ -1970,8 +1971,14 @@ ${originalWord}
     dictContainer.innerHTML = html || '<div class="vocabmeld-dict-empty">暂无词典数据</div>';
   }
 
-  function showTooltip(element) {
+  function showTooltip(element, mouseX, mouseY) {
     if (!tooltip || !element.classList?.contains('vocabmeld-translated')) return;
+    
+    // 如果是同一个元素且 tooltip 已显示，不重新计算位置
+    if (currentTooltipElement === element && tooltip.style.display === 'block') {
+      return;
+    }
+    currentTooltipElement = element;
 
     const original = element.getAttribute('data-original');
     const translation = element.getAttribute('data-translation');
@@ -2004,21 +2011,14 @@ ${originalWord}
     const dictWord = isOriginalTargetLang ? original : (isTranslationTargetLang ? translation : null);
 
     tooltip.innerHTML = `
-      <div class="vocabmeld-tooltip-header">
-        <span class="vocabmeld-tooltip-word">${translation}</span>
-        <span class="vocabmeld-tooltip-badge">${difficulty}</span>
-      </div>
-      ${phonetic && config.showPhonetic ? `<div class="vocabmeld-tooltip-phonetic">${phonetic}</div>` : ''}
-      <div class="vocabmeld-tooltip-original">原文: ${original}</div>
-      <div class="vocabmeld-tooltip-dict"></div>
       <div class="vocabmeld-tooltip-actions">
         <button class="vocabmeld-tooltip-btn vocabmeld-btn-speak" data-original="${original}" data-translation="${translation}" title="发音">
-          <svg viewBox="0 0 24 24" width="16" height="16">
+          <svg viewBox="0 0 24 24" width="14" height="14">
             <path fill="currentColor" d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z"/>
           </svg>
         </button>
         <button class="vocabmeld-tooltip-btn vocabmeld-btn-memorize ${isInMemorizeList ? 'active' : ''}" data-original="${original}" title="${isInMemorizeList ? '已在记忆列表' : '添加到记忆列表'}">
-          <svg viewBox="0 0 24 24" width="16" height="16">
+          <svg viewBox="0 0 24 24" width="14" height="14">
             ${isInMemorizeList 
               ? '<path fill="currentColor" d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"/>'
               : '<path fill="currentColor" d="M12.1,18.55L12,18.65L11.89,18.55C7.14,14.24 4,11.39 4,8.5C4,6.5 5.5,5 7.5,5C9.04,5 10.54,6 11.07,7.36H12.93C13.46,6 14.96,5 16.5,5C18.5,5 20,6.5 20,8.5C20,11.39 16.86,14.24 12.1,18.55M16.5,3C14.76,3 13.09,3.81 12,5.08C10.91,3.81 9.24,3 7.5,3C4.42,3 2,5.41 2,8.5C2,12.27 5.4,15.36 10.55,20.03L12,21.35L13.45,20.03C18.6,15.36 22,12.27 22,8.5C22,5.41 19.58,3 16.5,3Z"/>'
@@ -2026,21 +2026,68 @@ ${originalWord}
           </svg>
         </button>
         <button class="vocabmeld-tooltip-btn vocabmeld-btn-learned" data-original="${original}" data-translation="${translation}" data-difficulty="${difficulty}" title="标记已学会">
-          <svg viewBox="0 0 24 24" width="16" height="16">
+          <svg viewBox="0 0 24 24" width="14" height="14">
             <path fill="currentColor" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
           </svg>
         </button>
         <button class="vocabmeld-tooltip-btn vocabmeld-btn-retranslate" data-original="${original}" title="根据上下文重新翻译">
-          <svg viewBox="0 0 24 24" width="16" height="16">
+          <svg viewBox="0 0 24 24" width="14" height="14">
             <path fill="currentColor" d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
           </svg>
         </button>
       </div>
+      <div class="vocabmeld-tooltip-header">
+        <span class="vocabmeld-tooltip-word">${translation}</span>
+        <span class="vocabmeld-tooltip-badge">${difficulty}</span>
+      </div>
+      ${phonetic && config.showPhonetic ? `<div class="vocabmeld-tooltip-phonetic">${phonetic}</div>` : ''}
+      <div class="vocabmeld-tooltip-original">原文: ${original}</div>
+      <div class="vocabmeld-tooltip-dict"></div>
     `;
 
-    const rect = element.getBoundingClientRect();
-    tooltip.style.left = rect.left + window.scrollX + 'px';
-    tooltip.style.top = rect.bottom + window.scrollY + 2 + 'px';
+    // 使用 caretRangeFromPoint 找到鼠标所在行的位置
+    let posLeft, posTop;
+    const caretRange = document.caretRangeFromPoint(mouseX, mouseY);
+    if (caretRange && element.contains(caretRange.startContainer)) {
+      // 获取当前位置的行高和行底部位置
+      const tempRange = document.createRange();
+      tempRange.setStart(caretRange.startContainer, caretRange.startOffset);
+      tempRange.setEnd(caretRange.startContainer, caretRange.startOffset);
+      const caretRect = tempRange.getBoundingClientRect();
+      
+      // 找到该行的起始位置（向左扩展到行首）
+      const textNode = caretRange.startContainer;
+      if (textNode.nodeType === Node.TEXT_NODE) {
+        // 遍历找到当前行的起始字符
+        let lineStartOffset = 0;
+        for (let i = caretRange.startOffset; i >= 0; i--) {
+          tempRange.setStart(textNode, i);
+          tempRange.setEnd(textNode, i + 1 > textNode.length ? textNode.length : i + 1);
+          const charRect = tempRange.getBoundingClientRect();
+          if (Math.abs(charRect.top - caretRect.top) > 5) {
+            lineStartOffset = i + 1;
+            break;
+          }
+          lineStartOffset = i;
+        }
+        tempRange.setStart(textNode, lineStartOffset);
+        tempRange.setEnd(textNode, lineStartOffset + 1 > textNode.length ? textNode.length : lineStartOffset + 1);
+        const lineStartRect = tempRange.getBoundingClientRect();
+        posLeft = lineStartRect.left;
+        posTop = caretRect.bottom;
+      } else {
+        posLeft = caretRect.left;
+        posTop = caretRect.bottom;
+      }
+    } else {
+      // 回退方案
+      const rect = element.getBoundingClientRect();
+      posLeft = rect.left;
+      posTop = mouseY + 16;
+    }
+    
+    tooltip.style.left = posLeft + window.scrollX + 'px';
+    tooltip.style.top = posTop + window.scrollY + 2 + 'px';
     tooltip.style.display = 'block';
     
     // 显示词典数据（优先从缓存获取）
@@ -2077,10 +2124,12 @@ ${originalWord}
     if (immediate) {
       clearTimeout(tooltipHideTimeout);
       if (tooltip) tooltip.style.display = 'none';
+      currentTooltipElement = null;
     } else {
       // 延迟隐藏，给用户时间移动到 tooltip 上
       tooltipHideTimeout = setTimeout(() => {
         if (tooltip) tooltip.style.display = 'none';
+        currentTooltipElement = null;
       }, 200);
     }
   }
@@ -2131,7 +2180,7 @@ ${originalWord}
       
       if (target) {
         cancelHideTooltip();
-        showTooltip(target);
+        showTooltip(target, e.clientX, e.clientY);
       } else if (tooltipTarget) {
         // 鼠标移入 tooltip 时取消隐藏
         cancelHideTooltip();
