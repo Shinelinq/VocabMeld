@@ -934,11 +934,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       // 加载可用声音列表
       loadVoices(result.ttsVoice || '');
       
-      // 加载词汇列表
-      loadWordLists(result);
-      
-      // 加载统计
-      loadStats(result);
+      // 加载词汇列表和统计（从 local 获取词汇列表）
+      chrome.storage.local.get(['learnedWords', 'memorizeList'], (localResult) => {
+        loadWordLists(result, localResult.learnedWords || [], localResult.memorizeList || []);
+        loadStats(result, localResult.learnedWords || [], localResult.memorizeList || []);
+      });
     });
   }
 
@@ -948,9 +948,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   let allCachedWords = [];
 
   // 加载词汇列表
-  function loadWordLists(result) {
-    const learnedWords = result.learnedWords || [];
-    const memorizeList = result.memorizeList || [];
+  function loadWordLists(result, learnedWords, memorizeList) {
+    learnedWords = learnedWords || [];
+    memorizeList = memorizeList || [];
     
     // 保存原始数据（包含难度信息）
     allLearnedWords = learnedWords.map(w => ({
@@ -1160,24 +1160,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 删除词汇
   async function removeWord(word, type) {
     if (type === 'learned') {
-      chrome.storage.sync.get('learnedWords', (result) => {
+      chrome.storage.local.get('learnedWords', (result) => {
         const list = (result.learnedWords || []).filter(w => w.original !== word);
-        chrome.storage.sync.set({ learnedWords: list }, loadSettings);
+        chrome.storage.local.set({ learnedWords: list }, loadSettings);
       });
     } else if (type === 'memorize') {
-      chrome.storage.sync.get('memorizeList', (result) => {
+      chrome.storage.local.get('memorizeList', (result) => {
         const list = (result.memorizeList || []).filter(w => w.word !== word);
-        chrome.storage.sync.set({ memorizeList: list }, loadSettings);
+        chrome.storage.local.set({ memorizeList: list }, loadSettings);
       });
     }
   }
 
   // 加载统计数据
-  function loadStats(result) {
+  function loadStats(result, learnedWords, memorizeList) {
     elements.statTotalWords.textContent = result.totalWords || 0;
     elements.statTodayWords.textContent = result.todayWords || 0;
-    elements.statLearnedWords.textContent = (result.learnedWords || []).length;
-    elements.statMemorizeWords.textContent = (result.memorizeList || []).length;
+    elements.statLearnedWords.textContent = (learnedWords || []).length;
+    elements.statMemorizeWords.textContent = (memorizeList || []).length;
     
     const hits = result.cacheHits || 0;
     const misses = result.cacheMisses || 0;
@@ -1599,10 +1599,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           totalWords: 0,
           todayWords: 0,
           cacheHits: 0,
-          cacheMisses: 0,
-          learnedWords: [],
-          memorizeList: []
+          cacheMisses: 0
         });
+        // 词汇列表存储在 local 中
+        chrome.storage.local.set({ learnedWords: [], memorizeList: [] });
         chrome.storage.local.remove('vocabmeld_word_cache', () => {
           loadSettings();
           debouncedSave(200);
@@ -1648,8 +1648,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       
       if (elements.exportWords.checked) {
-        exportData.learnedWords = syncData.learnedWords || [];
-        exportData.memorizeList = syncData.memorizeList || [];
+        // 词汇列表存储在 local 中
+        const localWords = await new Promise(resolve => chrome.storage.local.get(['learnedWords', 'memorizeList'], resolve));
+        exportData.learnedWords = localWords.learnedWords || [];
+        exportData.memorizeList = localWords.memorizeList || [];
       }
       
       if (elements.exportStats.checked) {
@@ -1706,10 +1708,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           Object.assign(syncUpdates, data.settings);
         }
         if (data.learnedWords) {
-          syncUpdates.learnedWords = data.learnedWords;
+          // 词汇列表存储在 local 中
+          localUpdates.learnedWords = data.learnedWords;
         }
         if (data.memorizeList) {
-          syncUpdates.memorizeList = data.memorizeList;
+          // 词汇列表存储在 local 中
+          localUpdates.memorizeList = data.memorizeList;
         }
         if (data.stats) {
           Object.assign(syncUpdates, data.stats);

@@ -171,47 +171,50 @@
   // ============ 存储操作 ============
   async function loadConfig() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(null, (result) => {
-        config = {
-          apiEndpoint: result.apiEndpoint || 'https://api.deepseek.com/chat/completions',
-          apiKey: result.apiKey || '',
-          modelName: result.modelName || 'deepseek-chat',
-          nativeLanguage: result.nativeLanguage || 'zh-CN',
-          targetLanguage: result.targetLanguage || 'en',
-          difficultyLevel: result.difficultyLevel || 'B1',
-          intensity: result.intensity || 'medium',
-          processMode: result.processMode || 'both',
-          autoProcess: result.autoProcess ?? false,
-          showPhonetic: result.showPhonetic ?? true,
-          dictionaryType: result.dictionaryType || 'zh-en',
-          showAddMemorize: result.showAddMemorize ?? true,
-          cacheMaxSize: result.cacheMaxSize || DEFAULT_CACHE_MAX_SIZE,
-          translationStyle: result.translationStyle || 'translation-original',
-          theme: result.theme || 'dark',
-          enabled: result.enabled ?? true,
-          siteMode: result.siteMode || 'all',
-          excludedSites: result.excludedSites || result.blacklist || [],
-          allowedSites: result.allowedSites || [],
-          learnedWords: result.learnedWords || [],
-          memorizeList: result.memorizeList || [],
-          colorTheme: result.colorTheme || 'default',
-          customTheme: result.customTheme || null,
-          customizedThemes: result.customizedThemes || null
-        };
-        
-        // 加载保存的自定义主题配置
-        if (config.customizedThemes) {
-          ['ocean', 'forest', 'sunset'].forEach(themeId => {
-            if (config.customizedThemes[themeId]) {
-              BUILT_IN_THEMES[themeId] = config.customizedThemes[themeId];
-            }
-          });
-        }
-        
-        // 应用主题
-        applyColorTheme(config.colorTheme, config.customTheme);
-        
-        resolve(config);
+      chrome.storage.sync.get(null, (syncResult) => {
+        // 从 local 获取词汇列表（避免 sync 的 8KB 限制）
+        chrome.storage.local.get(['learnedWords', 'memorizeList'], (localResult) => {
+          config = {
+            apiEndpoint: syncResult.apiEndpoint || 'https://api.deepseek.com/chat/completions',
+            apiKey: syncResult.apiKey || '',
+            modelName: syncResult.modelName || 'deepseek-chat',
+            nativeLanguage: syncResult.nativeLanguage || 'zh-CN',
+            targetLanguage: syncResult.targetLanguage || 'en',
+            difficultyLevel: syncResult.difficultyLevel || 'B1',
+            intensity: syncResult.intensity || 'medium',
+            processMode: syncResult.processMode || 'both',
+            autoProcess: syncResult.autoProcess ?? false,
+            showPhonetic: syncResult.showPhonetic ?? true,
+            dictionaryType: syncResult.dictionaryType || 'zh-en',
+            showAddMemorize: syncResult.showAddMemorize ?? true,
+            cacheMaxSize: syncResult.cacheMaxSize || DEFAULT_CACHE_MAX_SIZE,
+            translationStyle: syncResult.translationStyle || 'translation-original',
+            theme: syncResult.theme || 'dark',
+            enabled: syncResult.enabled ?? true,
+            siteMode: syncResult.siteMode || 'all',
+            excludedSites: syncResult.excludedSites || syncResult.blacklist || [],
+            allowedSites: syncResult.allowedSites || [],
+            learnedWords: localResult.learnedWords || [],
+            memorizeList: localResult.memorizeList || [],
+            colorTheme: syncResult.colorTheme || 'default',
+            customTheme: syncResult.customTheme || null,
+            customizedThemes: syncResult.customizedThemes || null
+          };
+          
+          // 加载保存的自定义主题配置
+          if (config.customizedThemes) {
+            ['ocean', 'forest', 'sunset'].forEach(themeId => {
+              if (config.customizedThemes[themeId]) {
+                BUILT_IN_THEMES[themeId] = config.customizedThemes[themeId];
+              }
+            });
+          }
+          
+          // 应用主题
+          applyColorTheme(config.colorTheme, config.customTheme);
+          
+          resolve(config);
+        });
       });
     });
   }
@@ -359,7 +362,7 @@
         difficulty: difficulty || 'B1'
       });
       config.learnedWords = whitelist;
-      await new Promise(resolve => chrome.storage.sync.set({ learnedWords: whitelist }, resolve));
+      await new Promise(resolve => chrome.storage.local.set({ learnedWords: whitelist }, resolve));
     }
   }
 
@@ -376,7 +379,7 @@
     if (!exists) {
       list.push({ word: trimmedWord, addedAt: Date.now() });
       config.memorizeList = list;
-      await new Promise(resolve => chrome.storage.sync.set({ memorizeList: list }, resolve));
+      await new Promise(resolve => chrome.storage.local.set({ memorizeList: list }, resolve));
 
       // 添加到记忆列表后，立即检查页面上是否存在这些单词并触发翻译
       // 确保配置已加载且扩展已启用
@@ -424,7 +427,7 @@
     
     if (newList.length !== list.length) {
       config.memorizeList = newList;
-      await new Promise(resolve => chrome.storage.sync.set({ memorizeList: newList }, resolve));
+      await new Promise(resolve => chrome.storage.local.set({ memorizeList: newList }, resolve));
       showToast(`"${trimmedWord}" 已从记忆列表移除`);
     }
   }
